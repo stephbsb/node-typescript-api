@@ -6,12 +6,11 @@
   "scripts": {
     "build": "tsc",
     "start": "yarn build && node dist/src/index.js",
-    "start:local": "dotenv -e .env -- ts-node-dev --transpile-only src/index.ts | pino-pretty -c",
     "test": "yarn lint && yarn style:check && yarn test:unit && yarn test:functional",
     "lint": "eslint ./src ./test --ext .ts",
     "lint:fix": "eslint ./src ./test --ext .ts --fix",
     "test:functional": "jest --projects ./test --runInBand",
-    "test:unit": "dotenv -e .env -- jest",
+    "test:unit": "jest",
     "style:check": "prettier --check 'src/**/*.ts' 'test/**/*.ts'",
     "style:fix": "prettier --write 'src/**/*.ts' 'test/**/*.ts'"
   },
