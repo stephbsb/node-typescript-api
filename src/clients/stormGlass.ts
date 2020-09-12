@@ -1,5 +1,9 @@
-import { AxiosStatic } from 'axios';
+/* Class that is responsible for handling requests to the StormGlass API */
+import { InternalError } from '@src/util/errors/internal-error';
+import config, { IConfig } from 'config';
+import * as HTTPUtil from '@src/util/request';
 
+/* Request Related Types */
 export interface ForecastPoint {
   time: string;
   waveHeight: number;
@@ -30,28 +34,68 @@ export interface StormGlassForecastResponse {
   hours: StormGlassPoint[];
 }
 
+/* Error Types */
+export class ClientRequestError extends InternalError {
+  constructor(message: string) {
+    const internalMessage =
+      'Unexpected error when trying to communicate to StormGlass';
+    super(`${internalMessage}: ${message}`);
+  }
+}
+
+export class StormGlassResponseError extends InternalError {
+  constructor(message: string) {
+    const internalMessage =
+      'Unexpected error returned by the StormGlass service';
+    super(`${internalMessage}: ${message}`);
+  }
+}
+
+/* Config */
+const stormGlassResourceConfig: IConfig = config.get(
+  'App.resources.StormGlass'
+);
+
+/* Main Class */
 export class StormGlass {
   readonly stormGlassAPIParams =
     'swellDirection,swellHeight,swellPeriod,waveDirection,waveHeight,windDirection,windSpeed';
 
   readonly stormGlassAPISource = 'noaa';
 
-  constructor(protected request: AxiosStatic) {}
+  constructor(protected request = new HTTPUtil.Request()) {}
 
+  /* Method that performes the request to the api */
   public async fetchPoints(lat: number, lng: number): Promise<ForecastPoint[]> {
     /* Fetch from StormGlass Forecast API:  */
-    const response = await this.request.get<StormGlassForecastResponse>(
-      `https://api.stormglass.io/v2/weather/point?params=${this.stormGlassAPIParams}&source=${this.stormGlassAPISource}&end=1592113802&lat=${lat}&lng=${lng}`,
-      {
-        headers: {
-          Authorization: process.env.STORMGLASS_API_KEY,
-        },
-      }
-    );
+    try {
+      const response = await this.request.get<StormGlassForecastResponse>(
+        `${stormGlassResourceConfig.get('apiUrl')}/weather/point?params=${
+          this.stormGlassAPIParams
+        }&source=${
+          this.stormGlassAPISource
+        }&end=1592113802&lat=${lat}&lng=${lng}`,
+        {
+          headers: {
+            Authorization: stormGlassResourceConfig.get('apiToken'),
+          },
+        }
+      );
 
-    return this.normalizeResponse(response.data);
+      return this.normalizeResponse(response.data);
+    } catch (error) {
+      if (HTTPUtil.Request.isRequestError(error)) {
+        throw new StormGlassResponseError(
+          `Error: ${JSON.stringify(error.response.data)} Code: ${
+            error.response.status
+          } `
+        );
+      }
+      throw new ClientRequestError(error.message);
+    }
   }
 
+  /* Tranforms the response object received from the api into a more simple array of objects - */
   private normalizeResponse(
     points: StormGlassForecastResponse
   ): ForecastPoint[] {
@@ -67,7 +111,8 @@ export class StormGlass {
     }));
   }
 
-  /* Partial will force the keys to be optional and nedded to check */
+  /* Function to validate if all atributes are present
+     Partial will force the keys to be optional and nedded to check */
   private isValidPoint(point: Partial<StormGlassPoint>): boolean {
     return !!(
       point.time &&
